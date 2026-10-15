@@ -1,0 +1,6 @@
+{
+	"name": "死链巡检测试",
+	"avatar": null,
+	"description": "用于验证每周巡检会移除不可访问的友链",
+	"url": "https://zz-dead-test.invalid/"
+}

@@ -9,6 +9,12 @@
     ]
   },
   {
+    "name": "死链巡检测试",
+    "avatar": null,
+    "description": "用于验证每周巡检会移除不可访问的友链",
+    "url": "https://zz-dead-test.invalid/"
+  },
+  {
     "name": "夏夜流萤",
     "avatar": "https://weavatar.com/avatar/d252655d40d6874417a720bad0a6c5f77f8f6a1fd2f882f8f338402dc37e4190?s=640",
     "description": "飞萤之火自无梦的长夜亮起，绽放在终竟的明天。",
