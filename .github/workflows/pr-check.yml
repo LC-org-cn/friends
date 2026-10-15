@@ -1,0 +1,45 @@
+name: pr-check
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "data/friends/**"
+
+# 只需要评论与打标签的权限；不含 contents: write，避免误改仓库
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # 只 checkout 默认分支上的可信脚本，绝不 checkout / 执行 PR 里的代码。
+      # PR 的文件内容全部通过 GitHub API 读取，只当数据解析。
+      - name: Checkout 可信脚本（默认分支）
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 安装 Playwright（仅 chromium）
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+
+      - name: 校验条目并检测回链
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node .github/scripts/triage.js

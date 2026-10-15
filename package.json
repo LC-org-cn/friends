@@ -5,6 +5,6 @@
   "description": "LegspCpd Blog 的友链数据源：每站一个 JSON，构建后聚合为 friends.json",
   "scripts": {
     "build": "node scripts/build.js",
-    "test": "node scripts/build.test.cjs"
+    "test": "node scripts/build.test.cjs && node .github/scripts/backlink.test.cjs"
   }
 }
