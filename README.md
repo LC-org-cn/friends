@@ -10,28 +10,28 @@
 
 ## 怎么提交友链
 
-1. Fork 本仓库
-2. 在 `data/friends/` 下新建一个文件，内容按下面的格式填，然后提 PR
-3. Action 会自动校验并在 PR 里留言；维护者合并后，你的友链就会出现在本站友链页
+1. **先 Fork 本仓库**（点右上角 Fork，或直接打开 <https://github.com/LegspCpd/friends/fork>）
+2. 在**你 Fork 出来的那份仓库**里，于 `data/friends/` 下新建一个 JSON 文件，内容按下面的格式填
+3. 从你的仓库向本仓库**提交 Pull Request**
+4. Action 会自动在你的 PR 里留言：校验字段 + 访问你填写的页面检查回链；维护者合并后，你的友链就会出现在本站友链页
 
 **文件名规则**：用你站点的短名，只含字母、数字、`-`、`_`、`.`，例如 `your-blog.json`、`2x-nz.json`。
 文件名只用于区分条目，展示的是文件里的 `name` 字段。
 
-**想少点几下？** 可以直接用这个链接打开 GitHub 的新建文件页面（路径已填好），粘贴模板后提交即可：
+**想少点几下？** 先 Fork，然后把下面链接里的 `<你的 GitHub 用户名>` 换成你的用户名，即可直接打开「新建文件」页面（路径已填好），粘贴模板后提交即可：
 
 ```
-https://github.com/LegspCpd/friends/new/main?filename=data/friends/your-blog.json
+https://github.com/<你的 GitHub 用户名>/friends/new/main?filename=data/friends/your-blog.json
 ```
 
-下面是一个完整示例；其中 `description` / `vip` / `backlink` / `tags` 都可以省略，只保留 `name` / `avatar` / `url` 也能提交：
+下面是一个完整示例；其中 `description` / `backlink` / `tags` 都可以省略，只保留 `name` / `avatar` / `url` 也能提交：
 
 ```json
 {
   "name": "你的站点名",
   "avatar": "https://你的头像地址.png",
-  "description": "一句话简介（可选，最多 200 字）",
+  "description": "一句话简介（可选，最多 100 字）",
   "url": "https://你的站点/",
-  "vip": false,
   "backlink": "https://你的站点/friends/",
   "tags": ["Blog"]
 }
@@ -43,9 +43,8 @@ https://github.com/LegspCpd/friends/new/main?filename=data/friends/your-blog.jso
 | --- | --- | --- |
 | `name` | ✅ | 站点名，非空，最多 60 字 |
 | `avatar` | ✅ | 头像 URL；没有就填 `null`，页面会用占位图 |
-| `description` | ➖ | 简介，最多 200 字 |
+| `description` | ➖ | 简介，最多 100 字 |
 | `url` | ✅ | 你的站点地址，必须是 `http://` 或 `https://` 开头 |
-| `vip` | ➖ | `true` 会被置顶，默认 `false` |
 | `backlink` | ➖ | **你放置本站链接的那个页面**。填了它，检查器会直接去看这一页，成功率更高 |
 | `tags` | ➖ | 标签数组，最多 5 个、每个最多 20 字 |
 
@@ -60,13 +59,15 @@ https://github.com/LegspCpd/friends/new/main?filename=data/friends/your-blog.jso
 
 ## 关于回链检查
 
-合并前后，Action 会尝试打开你的站点，检查里面有没有指向本站的链接。判定时会接受本站的任一域名：
+Action 会访问**你在 JSON 里填写的那个页面**（填了 `backlink` 就用它，否则用 `url`），检查里面有没有指向本站的链接。
+
+以下域名**任意一个**都算数（带不带结尾斜杠、http/https 都可以）：
 
 - `https://blog.legspcpd.top/`
 - `https://www.legspcpd.top/`
 - `https://legspcpd.top/`
 
-**检测结果只作为参考，不会自动拒绝或自动移除你的友链。** 如果你的站点有反爬（例如人机验证）导致抓取不到，评论里会附上抓到的链接列表，方便你自查；必要时可以直接联系站主。
+也就是说：你在自己站点上放的是哪个域名，就按哪个域名判定，不必三个都放。
 
 ## 检查结果与标签
 

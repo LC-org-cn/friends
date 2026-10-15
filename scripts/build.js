@@ -15,7 +15,7 @@ const ROOT = path.resolve(__dirname, "..");
 const DATA_FRIENDS = path.join(ROOT, "data", "friends");
 const OUT_FILE = path.join(ROOT, "friends.json");
 
-const LIMITS = { name: 60, description: 200, tag: 20, tags: 5 };
+const LIMITS = { name: 60, description: 100, tag: 20, tags: 5 };
 
 function isNonEmptyString(v) { return typeof v === "string" && v.trim().length > 0; }
 function isNullOrString(v) { return v === null || typeof v === "string"; }
@@ -41,7 +41,6 @@ function validateEntry(d) {
     else if (d.description.length > LIMITS.description) errs.push("description 过长（上限 " + LIMITS.description + "）");
   }
   if (!isHttpUrl(d.url)) errs.push("url 必需且必须是 http(s) 绝对 URL");
-  if (d.vip !== undefined && typeof d.vip !== "boolean") errs.push("vip 必须是布尔值");
   if (d.backlink !== undefined && !isHttpUrl(d.backlink)) errs.push("backlink 必须是 http(s) 绝对 URL");
   if (d.tags !== undefined) {
     if (!Array.isArray(d.tags)) errs.push("tags 必须是数组");
@@ -52,7 +51,7 @@ function validateEntry(d) {
     }
   }
   for (const k of Object.keys(d)) {
-    if (["name","avatar","description","url","vip","backlink","tags"].indexOf(k) === -1) {
+    if (["name","avatar","description","url","backlink","tags"].indexOf(k) === -1) {
       errs.push("存在未知字段：" + k);
     }
   }
@@ -97,12 +96,9 @@ function loadFriends(dir) {
   return entries.map(function (e) { return e.data; });
 }
 
-/** vip 置顶，其余按名称排序（中文按拼音） */
+/** 按名称排序（中文按拼音） */
 function sortFriends(list) {
   return list.slice().sort(function (a, b) {
-    const av = a.vip === true ? 0 : 1;
-    const bv = b.vip === true ? 0 : 1;
-    if (av !== bv) return av - bv;
     return String(a.name).localeCompare(String(b.name), "zh-CN");
   });
 }
@@ -111,7 +107,7 @@ function build() {
   console.log("\n📦 读取 data/friends ...");
   const list = sortFriends(loadFriends(DATA_FRIENDS));
   fs.writeFileSync(OUT_FILE, JSON.stringify(list, null, 2) + "\n", "utf8");
-  console.log("   ✓ 共 " + list.length + " 条，vip " + list.filter(function (x) { return x.vip === true; }).length + " 条");
+  console.log("   ✓ 共 " + list.length + " 条");
   console.log("   → " + path.relative(ROOT, OUT_FILE));
   return list;
 }

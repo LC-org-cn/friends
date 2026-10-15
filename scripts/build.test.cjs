@@ -34,9 +34,19 @@ ok("name 超长被拒", function () {
 ok("dedupeKey 忽略尾斜杠与大小写", function () {
   assert.strictEqual(dedupeKey("https://A.com/x/"), dedupeKey("https://a.com/x"));
 });
-ok("vip 置顶排序", function () {
-  const r = sortFriends([{ name: "b" }, { name: "a", vip: true }]);
+ok("按名称排序", function () {
+  const r = sortFriends([{ name: "b" }, { name: "a" }]);
   assert.strictEqual(r[0].name, "a");
+});
+ok("vip 字段已被移除，出现即判为未知字段", function () {
+  const errs = validateEntry({ name: "A", avatar: null, url: "https://a.com/", vip: true });
+  assert.ok(errs.length > 0, "含 vip 应被拒绝");
+});
+ok("description 上限为 100", function () {
+  const okDesc = validateEntry({ name: "A", avatar: null, url: "https://a.com/", description: "x".repeat(100) });
+  const longDesc = validateEntry({ name: "A", avatar: null, url: "https://a.com/", description: "x".repeat(101) });
+  assert.strictEqual(okDesc.length, 0);
+  assert.ok(longDesc.length > 0, "101 字应被拒绝");
 });
 
 console.log("\n✅ 全部通过：" + pass + " 项\n");

@@ -1,20 +1,9 @@
 [
   {
-    "name": "Bai21357",
-    "avatar": "https://img.legspcpd.de5.net/file/image/image(1).webp",
-    "description": "Actions speak louder than words.",
-    "url": "https://baiblog.vip/",
-    "vip": true,
-    "tags": [
-      "Blog"
-    ]
-  },
-  {
     "name": "二叉树树",
     "avatar": "https://img.legspcpd.de5.net/file/image/image.webp",
     "description": "二叉树树的博客",
     "url": "https://2x.nz/",
-    "vip": false,
     "tags": [
       "Blog"
     ]
@@ -24,7 +13,15 @@
     "avatar": "https://weavatar.com/avatar/d252655d40d6874417a720bad0a6c5f77f8f6a1fd2f882f8f338402dc37e4190?s=640",
     "description": "飞萤之火自无梦的长夜亮起，绽放在终竟的明天。",
     "url": "https://blog.cuteleaf.cn/",
-    "vip": false,
+    "tags": [
+      "Blog"
+    ]
+  },
+  {
+    "name": "Bai21357",
+    "avatar": "https://img.legspcpd.de5.net/file/image/image(1).webp",
+    "description": "Actions speak louder than words.",
+    "url": "https://baiblog.vip/",
     "tags": [
       "Blog"
     ]
@@ -34,7 +31,6 @@
     "avatar": "https://avatars.githubusercontent.com/u/178663977?v=4",
     "description": "Guess I'm a poet as well — my code's full of line breaks",
     "url": "https://enashpinal.pages.dev/",
-    "vip": false,
     "tags": [
       "Blog"
     ]
