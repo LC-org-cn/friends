@@ -18,7 +18,19 @@ async function withPlaywright(url, timeoutMs) {
 		const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
 		// 给前端框架一点渲染时间，很多友链页是 JS 渲染的
 		await page.waitForTimeout(2500);
-		return { ok: true, html: await page.content(), status: resp ? resp.status() : 0, via: "playwright" };
+		// 有些站点（例如人机验证页）会持续自我导航，page.content() 会瞬时失败；
+		// 重试几次比直接放弃更稳 —— 这正是用真浏览器而不是普通抓取的意义。
+		let html = "";
+		for (let attempt = 0; attempt < 3; attempt++) {
+			try {
+				html = await page.content();
+				break;
+			} catch (contentError) {
+				if (attempt === 2) throw contentError;
+				await page.waitForTimeout(1500);
+			}
+		}
+		return { ok: true, html: html, status: resp ? resp.status() : 0, via: "playwright" };
 	} finally {
 		await browser.close().catch(function () {});
 	}
