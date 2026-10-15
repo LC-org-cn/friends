@@ -1,0 +1,10 @@
+[
+	{
+		"name": "死链巡检测试",
+		"url": "https://zz-dead-test.invalid/",
+		"avatar": null,
+		"description": "用于验证每周巡检会移除不可访问的友链",
+		"removedAt": "2026-10-15T20:53:58.186Z",
+		"reason": "fetch failed"
+	}
+]
