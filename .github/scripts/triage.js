@@ -9,7 +9,8 @@
  *
  * 结论分档（见 backlink.js 的 classifyCheck）：
  *  passed / notFound / degraded / fetchFailed / unsafe / invalid
- *  其中 degraded 明确表示「真浏览器失败、降级抓取，结论不可信」，
+  *  其中 degraded 表示「抓取方式降级，或抓到的其实是人机验证页」，结论不可信，
+   *  绝不与 notFound（抓到了真实页面、确实没有链接）混为一谈。
  *  绝不与 notFound（抓到了真实页面、确实没有链接）混为一谈。
  */
 const {
@@ -17,6 +18,7 @@ const {
 	verifyBacklink,
 	formatDebug,
 	classifyCheck,
+	detectChallenge,
 	isSafeHttpUrl,
 } = require("./backlink.js");
 const { fetchHtml } = require("./fetch-page.js");
@@ -93,9 +95,14 @@ function renderResult(r, defaultBranch) {
 		out.push("> 抓取方式：" + (r.check.via || "?") + (r.check.status ? "，HTTP " + r.check.status : ""));
 	} else if (kind === "degraded") {
 		out.push("⚠️ **无法确认回链**（既不算通过，也不算没加）：");
-		out.push("- 真浏览器没能打开该页面，已降级为普通抓取，拿到的很可能不是真实页面。");
+		if (r.check.challenge) {
+			out.push("- 抓到的其实是站点的人机验证页（检测到：**" + r.check.challenge + "**），不是真实页面。");
+			out.push("- 因此**无法据此判断你是否添加了本站链接**，请不要认为是自己的问题。");
+		} else {
+			out.push("- 真浏览器没能打开该页面，已降级为普通抓取，拿到的很可能不是真实页面。");
+			out.push("- 降级原因：" + (r.check.playwrightError || "未知"));
+		}
 		out.push("- 常见原因：站点有人机验证（如 Anubis/Cloudflare 盾）、阻止无头浏览器、或加载超时。");
-		out.push("- 降级原因：" + (r.check.playwrightError || "未知"));
 		out.push(formatDebug(r.check));
 		out.push("");
 		out.push("> 这类情况**需要维护者人工确认**，请勿据此认定对方没有添加友链。");
@@ -154,10 +161,19 @@ async function main() {
 				const page = await fetchHtml(target);
 				if (!page.ok) out.check = { found: false, error: page.error };
 				else {
+					const challenge = detectChallenge(page.html);
 					Object.assign(
 						(out.check = verifyBacklink(page.html, aliases)),
-						{ via: page.via, status: page.status, degraded: page.degraded === true, playwrightError: page.playwrightError },
+						{
+							via: page.via,
+							status: page.status,
+							degraded: page.degraded === true,
+							playwrightError: page.playwrightError,
+							challenge: challenge.detected ? challenge.name : null,
+						},
 					);
+					// 挑战页里的链接都是验证系统自己的，不能当作「对方没加友链」的证据
+					if (challenge.detected) out.check.found = false;
 				}
 			}
 		}

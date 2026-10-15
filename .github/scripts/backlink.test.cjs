@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, classifyCheck, validateEntry } = require("./backlink.js");
+const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, detectChallenge, classifyCheck, validateEntry } = require("./backlink.js");
 
 const ALIASES = ["https://blog.legspcpd.top/", "https://www.legspcpd.top/", "https://legspcpd.top/"];
 let pass = 0;
@@ -70,6 +70,26 @@ ok("classifyCheck：完全抓不到 -> fetchFailed", function () {
 });
 ok("classifyCheck：地址不安全 -> unsafe", function () {
   assert.strictEqual(classifyCheck({ unsafe: true }), "unsafe");
+});
+
+ok("detectChallenge：识别 Anubis 挑战页", function () {
+  assert.strictEqual(detectChallenge("<title>Making sure you are not a bot!</title>").name, "Anubis");
+  assert.strictEqual(detectChallenge('<a href="https://anubis.legspcpd.top/cdn-cgi/content?id=x">').name, "Anubis");
+  assert.strictEqual(detectChallenge('<script src="https://github.com/TecharoHQ/anubis">').name, "Anubis");
+});
+ok("detectChallenge：识别 Cloudflare 盾", function () {
+  assert.strictEqual(detectChallenge("<title>Just a moment...</title>").name, "Cloudflare");
+  assert.strictEqual(detectChallenge('<script src="https://challenges.cloudflare.com/turnstile">').name, "Cloudflare");
+});
+ok("detectChallenge：正常页面不误判", function () {
+  const normal = '<html><head><title>某人的博客</title></head><body><a href="https://example.com/">友链</a></body></html>';
+  assert.strictEqual(detectChallenge(normal).detected, false);
+  assert.strictEqual(detectChallenge("").detected, false);
+  assert.strictEqual(detectChallenge(null).detected, false);
+});
+ok("classifyCheck：抓到的其实是挑战页 -> degraded", function () {
+  assert.strictEqual(classifyCheck({ check: { found: false, challenge: "Anubis" } }), "degraded");
+  assert.strictEqual(classifyCheck({ check: { found: true, challenge: "Anubis" } }), "degraded");
 });
 
 console.log("\n✅ 全部通过：" + pass + " 项\n");

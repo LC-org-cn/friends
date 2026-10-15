@@ -85,13 +85,40 @@ function formatDebug(result) {
 }
 
 /**
+ * 从页面内容本身识别「这是人机验证/拦截页，不是真实内容」。
+ *
+ * 为什么必须看内容而不能只看抓取方式：实测中 Playwright 能正常打开被 Anubis
+ * 保护的站点，但返回的仍是挑战页 HTML —— 「浏览器成功」并不等于「拿到了真实页面」。
+ */
+const CHALLENGE_SIGNATURES = [
+	{ name: "Anubis", re: /making sure you.{0,3}re not a bot/i },
+	{ name: "Anubis", re: /\/cdn-cgi\/content\?id=/i },
+	{ name: "Anubis", re: /TecharoHQ/i },
+	{ name: "Cloudflare", re: /just a moment/i },
+	{ name: "Cloudflare", re: /challenges\.cloudflare\.com/i },
+	{ name: "Cloudflare", re: /cf[-_]chl[-_]|__cf_chl/i },
+	{ name: "Cloudflare", re: /enable javascript and cookies to continue/i },
+	{ name: "DDoS-Guard", re: /ddos-guard|__ddg/i },
+];
+
+function detectChallenge(html) {
+	if (typeof html !== "string" || !html) return { detected: false, name: null };
+	// 只看前 20KB：挑战页很短，避免正文里的偶发词造成误判
+	const head = html.slice(0, 20000);
+	for (const sig of CHALLENGE_SIGNATURES) {
+		if (sig.re.test(head)) return { detected: true, name: sig.name };
+	}
+	return { detected: false, name: null };
+}
+
+/**
  * 把一个条目的检查结果归类。抽成纯函数是为了可单测，也保证评论措辞与标签一致。
  *
  * 分类：
  *   invalid      条目字段不合法
  *   unsafe       填的地址不是公网 http(s)
  *   fetchFailed  页面完全抓不到
- *   degraded     真浏览器失败、降级为普通抓取 —— 结论不可信，不能算「确认没有」
+ *   degraded     抓取方式降级，或抓到的其实是挑战页 —— 结论不可信，不能算「确认没有」
  *   passed       确认已放回链
  *   notFound     抓到了真实页面，但里面确实没有本站链接
  */
@@ -100,10 +127,19 @@ function classifyCheck(r) {
 	if (r.errors && r.errors.length) return "invalid";
 	if (r.unsafe) return "unsafe";
 	if (!r.check) return "fetchFailed";
-	if (r.check.degraded) return "degraded";
+	if (r.check.degraded || r.check.challenge) return "degraded";
 	if (r.check.found) return "passed";
 	if (r.check.error) return "fetchFailed";
 	return "notFound";
 }
 
-module.exports = { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, formatDebug, classifyCheck, validateEntry: build.validateEntry };
+module.exports = {
+	isSafeHttpUrl,
+	normalizeUrl,
+	extractHrefs,
+	verifyBacklink,
+	formatDebug,
+	detectChallenge,
+	classifyCheck,
+	validateEntry: build.validateEntry,
+};
