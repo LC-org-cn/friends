@@ -1,0 +1,45 @@
+name: weekly-link-check
+
+on:
+  schedule:
+    # 每周一 03:00 UTC（北京 11:00）
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-link-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 巡检并移除死链
+        run: node .github/scripts/dead-link-check.js
+
+      - name: 重新聚合 friends.json
+        run: node scripts/build.js
+
+      - name: 提交变更
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "没有变化，跳过提交"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: 每周死链巡检，移除不可访问的友链"
+          git push
