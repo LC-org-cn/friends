@@ -6,9 +6,10 @@ on:
     paths:
       - "data/friends/**"
 
-# 只需要评论与打标签的权限；不含 contents: write，避免误改仓库
+# contents: write 仅用于「文件名漏写 .json 时自动改名」；仍然只读 PR 文件内容当数据解析，
+# 绝不 checkout 或执行 PR 里的代码（见下方 checkout 步骤）。
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   issues: write
 

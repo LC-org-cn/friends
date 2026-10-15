@@ -86,6 +86,56 @@ async function getChangedFriendFiles() {
 	});
 }
 
+/**
+ * 文件名漏写 .json 时自动改名并推回 PR 分支；改名会产生 synchronize 事件，
+ * 工作流随即可重新跑一遍完整检查（这就是「自动补上再重新检测」）。
+ * 只处理本仓库分支的 PR —— fork 来的 PR 机器人没有写权限。
+ */
+async function tryFixFilename(f, pull) {
+	if (!f.filename || f.filename.slice(-5) === ".json") return { ok: false, reason: "" };
+	const head = pull && pull.head;
+	if (!head || !head.repo || head.repo.full_name !== REPO) {
+	return { ok: false, reason: "该 PR 来自 fork，机器人无法代为改名，请把文件重命名为 " + f.filename + ".json" };
+	}
+	const newPath = f.filename + ".json";
+	let text;
+	try {
+	text = await readFileAt(head.sha, f.filename);
+	} catch (e) {
+	return { ok: false, reason: "读取文件失败：" + (e.message || String(e)) };
+	}
+	try {
+	JSON.parse(text);
+	} catch (e) {
+	return { ok: false, reason: "内容不是合法 JSON，未自动改名（" + (e.message || String(e)) + "）" };
+	}
+	try {
+	await readFileAt(head.sha, newPath);
+	return { ok: false, reason: "已存在同名文件 " + newPath + "，请手动确认" };
+	} catch (e) {
+	// 目标不存在，正是我们要的
+	}
+	const created = await api("/repos/" + REPO + "/contents/" + newPath, {
+	method: "PUT",
+	body: JSON.stringify({
+	message: "chore(friends): 文件名补上 .json 后缀",
+	content: Buffer.from(text, "utf8").toString("base64"),
+	branch: head.ref,
+	}),
+	});
+	if (!created.ok) return { ok: false, reason: "自动改名失败（新建文件）：" + (await created.text()).slice(0, 200) };
+	const removed = await api("/repos/" + REPO + "/contents/" + f.filename, {
+	method: "DELETE",
+	body: JSON.stringify({
+	message: "chore(friends): 删除缺少后缀的旧文件名",
+	sha: f.sha,
+	branch: head.ref,
+	}),
+	});
+	if (!removed.ok) return { ok: false, reason: "已建好 " + newPath + "，但旧文件删除失败：" + (await removed.text()).slice(0, 200) };
+	return { ok: true, newPath: newPath };
+}
+
 async function readFileAt(ref, path) {
 	const res = await api(
 		"/repos/" + REPO + "/contents/" + encodeURIComponent(path).replace(/%2F/g, "/") + "?ref=" + ref,
@@ -164,7 +214,13 @@ async function main() {
 		try {
 			const nameIssue = filenameIssue(f.filename);
 			if (nameIssue) {
-				out.errors = [nameIssue];
+				const fixed = await tryFixFilename(f, pull);
+				if (fixed.ok) {
+					out.fixed = fixed.newPath;
+					results.push(out);
+					continue; // 改名触发 synchronize，下一次运行再正式检查
+				}
+				out.errors = [nameIssue, fixed.reason].filter(Boolean);
 				results.push(out);
 				continue;
 			}
@@ -213,6 +269,10 @@ async function main() {
 	lines.push("");
 	for (const r of results) {
 		lines.push.apply(lines, renderResult(r, defaultBranch));
+		if (r.fixed) {
+			lines.push("");
+			lines.push("> 检测到文件名缺少 " + String.fromCharCode(96) + ".json" + String.fromCharCode(96) + " 后缀，**已自动重命名为 " + String.fromCharCode(96) + r.fixed + String.fromCharCode(96) + "**，正在重新检查，稍等片刻。");
+		}
 		if (r.data) {
 			lines.push("");
 			lines.push("- 网站可达：" + (r.siteOk && r.siteOk.ok ? "✅ HTTP " + r.siteOk.status : "❌ " + ((r.siteOk && r.siteOk.reason) || "不可达")));
