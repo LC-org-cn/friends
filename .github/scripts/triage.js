@@ -20,6 +20,8 @@ const {
 	classifyCheck,
 	detectChallenge,
 	isSafeHttpUrl,
+	computeLabels,
+	checkReachable,
 } = require("./backlink.js");
 const { fetchHtml } = require("./fetch-page.js");
 
@@ -27,6 +29,19 @@ const TOKEN = process.env.GITHUB_TOKEN || "";
 const REPO = process.env.GITHUB_REPOSITORY || "";
 const PR = process.env.PR_NUMBER || "";
 const API = "https://api.github.com";
+
+const LABEL_COLOR = {
+	"友链": "0e8a16",
+	"网站可达": "0e8a16",
+	"头像可达": "0e8a16",
+	"双向链接验证": "0e8a16",
+	"URL 全部可达": "0e8a16",
+	"网站不可达": "d73a4a",
+	"头像不可达": "d73a4a",
+	"未找到回链": "d73a4a",
+	"URL 有不可达": "d73a4a",
+	"回链检查受限": "fbca04",
+};
 
 const LABEL_BY_KIND = {
 	invalid: "link-check: 条目无效",
@@ -177,6 +192,9 @@ async function main() {
 				}
 			}
 		}
+		// 网站与头像的独立可达性（对应「网站可达」「头像可达」标签）
+		if (out.data && out.data.url) out.siteOk = await checkReachable(out.data.url);
+		if (out.data && out.data.avatar) out.avatarOk = await checkReachable(out.data.avatar);
 		results.push(out);
 	}
 
@@ -185,7 +203,14 @@ async function main() {
 	lines.push("");
 	lines.push("> 仅供你自查参考；**不会自动拒绝或自动合并**，最终由维护者判断。");
 	lines.push("");
-	for (const r of results) lines.push.apply(lines, renderResult(r, defaultBranch));
+	for (const r of results) {
+		lines.push.apply(lines, renderResult(r, defaultBranch));
+		if (r.data) {
+			lines.push("");
+			lines.push("- 网站可达：" + (r.siteOk && r.siteOk.ok ? "✅ HTTP " + r.siteOk.status : "❌ " + ((r.siteOk && r.siteOk.reason) || "不可达")));
+			lines.push("- 头像可达：" + (!r.data.avatar ? "—（未填头像）" : r.avatarOk && r.avatarOk.ok ? "✅ HTTP " + r.avatarOk.status : "❌ " + ((r.avatarOk && r.avatarOk.reason) || "不可达")));
+		}
+	}
 	lines.push("---");
 	lines.push(
 		"由 `pr-check` workflow 自动生成 · [" +
@@ -204,13 +229,13 @@ async function main() {
 		body: JSON.stringify({ body: lines.join("\n") }),
 	});
 
-	const want = new Set();
-	for (const r of results) want.add(LABEL_BY_KIND[classifyCheck(r)]);
+	// 一项检查一个标签，成对出现（通过 / 不通过），便于一眼看出卡在哪一项
+	const want = new Set(computeLabels(results));
 	for (const name of want) {
 		try {
 			await api("/repos/" + REPO + "/labels", {
 				method: "POST",
-				body: JSON.stringify({ name: name, color: "ededed", description: "由 pr-check workflow 自动添加" }),
+				body: JSON.stringify({ name: name, color: LABEL_COLOR[name] || "ededed", description: "由 pr-check workflow 自动添加" }),
 			});
 		} catch (e) { /* 已存在则忽略 */ }
 	}

@@ -122,6 +122,71 @@ function detectChallenge(html) {
  *   passed       确认已放回链
  *   notFound     抓到了真实页面，但里面确实没有本站链接
  */
+/**
+ * 判断地址是否可达（用于「网站可达」「头像可达」两项标签）。
+ * 先 HEAD，很多站点不支持 HEAD 时退回 GET；只关心通/不通与状态码。
+ */
+async function checkReachable(url, opts) {
+	const o = opts || {};
+	if (!isSafeHttpUrl(url)) return { ok: false, reason: "地址被安全策略拒绝" };
+	const timeoutMs = o.timeoutMs || 12000;
+	let lastReason = "不可达";
+	for (const method of ["HEAD", "GET"]) {
+		const ctrl = new AbortController();
+		const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+		try {
+			const res = await fetch(url, {
+				method: method,
+				redirect: "follow",
+				signal: ctrl.signal,
+				headers: {
+					"user-agent": "FireflyFriendsCheck/1.0 (+https://github.com/LegspCpd/friends)",
+					accept: "*/*",
+				},
+			});
+			clearTimeout(timer);
+			if (res.status >= 200 && res.status < 400) return { ok: true, status: res.status };
+			lastReason = "HTTP " + res.status;
+			if (method === "GET") return { ok: false, status: res.status, reason: lastReason };
+		} catch (e) {
+			clearTimeout(timer);
+			lastReason = e && e.message ? e.message : String(e);
+			if (method === "GET") return { ok: false, reason: lastReason };
+		}
+	}
+	return { ok: false, reason: lastReason };
+}
+
+/**
+ * 由各条检查结果汇总 PR 标签：一项检查一个标签，成对出现（通过 / 不通过）。
+ * 纯函数，便于测试。
+ */
+function computeLabels(results) {
+	const want = new Set(["友链"]);
+	let siteAll = true;
+	let avatarAll = true;
+	let hasAvatar = false;
+	let backlinkOk = true;
+	let backlinkUnknown = false;
+	for (const r of results) {
+		if (!(r.siteOk && r.siteOk.ok)) siteAll = false;
+		if (r.data && r.data.avatar) {
+			hasAvatar = true;
+			if (!(r.avatarOk && r.avatarOk.ok)) avatarAll = false;
+		}
+		const kind = classifyCheck(r);
+		if (kind === "notFound") backlinkOk = false;
+		else if (kind !== "passed") backlinkUnknown = true;
+	}
+	want.add(siteAll ? "网站可达" : "网站不可达");
+	if (hasAvatar) want.add(avatarAll ? "头像可达" : "头像不可达");
+	if (backlinkOk && backlinkUnknown) want.add("回链检查受限");
+	else if (backlinkOk) want.add("双向链接验证");
+	else want.add("未找到回链");
+	want.add(siteAll && avatarAll ? "URL 全部可达" : "URL 有不可达");
+	return Array.from(want);
+}
+
 function classifyCheck(r) {
 	if (!r) return "fetchFailed";
 	if (r.errors && r.errors.length) return "invalid";
@@ -141,5 +206,7 @@ module.exports = {
 	formatDebug,
 	detectChallenge,
 	classifyCheck,
+	computeLabels,
+	checkReachable,
 	validateEntry: build.validateEntry,
 };

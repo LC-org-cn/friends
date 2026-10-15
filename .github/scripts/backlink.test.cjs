@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, detectChallenge, classifyCheck, validateEntry } = require("./backlink.js");
+const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, detectChallenge, classifyCheck, validateEntry, computeLabels } = require("./backlink.js");
 
 const ALIASES = ["https://blog.legspcpd.top/", "https://www.legspcpd.top/", "https://legspcpd.top/"];
 let pass = 0;
@@ -92,4 +92,32 @@ ok("classifyCheck：抓到的其实是挑战页 -> degraded", function () {
   assert.strictEqual(classifyCheck({ check: { found: true, challenge: "Anubis" } }), "degraded");
 });
 
+
+ok("computeLabels：全部通过时给出正向标签", function () {
+	const labels = computeLabels([{ data: { url: "https://a.example/", avatar: "https://a.example/avatar.png" }, siteOk: { ok: true, status: 200 }, avatarOk: { ok: true, status: 200 }, check: { found: true } }]);
+	["友链", "网站可达", "头像可达", "双向链接验证", "URL 全部可达"].forEach(function (n) { assert.ok(labels.indexOf(n) >= 0, "缺少 " + n); });
+	assert.ok(labels.indexOf("网站不可达") < 0);
+	assert.ok(labels.indexOf("未找到回链") < 0);
+});
+ok("computeLabels：站点不可达 -> 负向标签", function () {
+	const labels = computeLabels([{ data: { url: "https://a.example/" }, siteOk: { ok: false, reason: "HTTP 500" }, check: { found: true } }]);
+	assert.ok(labels.indexOf("网站不可达") >= 0);
+	assert.ok(labels.indexOf("URL 有不可达") >= 0);
+	assert.ok(labels.indexOf("网站可达") < 0);
+});
+ok("computeLabels：未找到回链", function () {
+	const labels = computeLabels([{ data: { url: "https://a.example/" }, siteOk: { ok: true, status: 200 }, check: { found: false } }]);
+	assert.ok(labels.indexOf("未找到回链") >= 0);
+	assert.ok(labels.indexOf("双向链接验证") < 0);
+});
+ok("computeLabels：未填头像时不出现头像标签", function () {
+	const labels = computeLabels([{ data: { url: "https://a.example/" }, siteOk: { ok: true, status: 200 }, check: { found: true } }]);
+	assert.ok(labels.indexOf("头像可达") < 0);
+	assert.ok(labels.indexOf("头像不可达") < 0);
+	assert.ok(labels.indexOf("URL 全部可达") >= 0);
+});
+ok("computeLabels：抓取受限标为回链检查受限", function () {
+	const labels = computeLabels([{ data: { url: "https://a.example/" }, siteOk: { ok: true, status: 200 }, check: { found: false, challenge: "Anubis" } }]);
+	assert.ok(labels.indexOf("回链检查受限") >= 0);
+});
 console.log("\n✅ 全部通过：" + pass + " 项\n");
