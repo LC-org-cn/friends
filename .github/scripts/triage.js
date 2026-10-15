@@ -215,25 +215,36 @@ async function main() {
 		return;
 	}
 
+	// 前置预检：文件名漏写 .json 的先自动改名。
+	// 用 GITHUB_TOKEN 推的提交不会触发新工作流，所以改名后当场刷新 head 与文件列表，
+	// 本次运行直接按新名字做完整检查（即「自动补上，再重新检测」）。
+	const fixedNames = {};
+	let filesToCheck = files;
+	for (const f of filesToCheck) {
+	if (!filenameIssue(f.filename)) continue;
+	const fixed = await tryFixFilename(f, pull);
+	if (fixed.ok) {
+	fixedNames[fixed.newPath] = true;
+	console.log("已自动改名：" + f.filename + " -> " + fixed.newPath);
+	} else if (fixed.reason) {
+	console.log("自动改名未完成：" + fixed.reason);
+	}
+	}
+	if (Object.keys(fixedNames).length > 0) {
+	const freshPull = await (await api("/repos/" + REPO + "/pulls/" + PR)).json();
+	headSha = freshPull.head.sha;
+	filesToCheck = await getChangedFriendFiles();
+	}
+
 	const results = [];
-	for (const f of files) {
+	for (const f of filesToCheck) {
 		const out = { file: f.filename, status: f.status };
+			if (fixedNames[f.filename]) out.fixed = f.filename;
 		try {
+			// 文件名的自动补缀已在前置预检里处理；走到这里说明无法自动修（如 fork 的 PR）
 			const nameIssue = filenameIssue(f.filename);
 			if (nameIssue) {
-				const fixed = await tryFixFilename(f, pull);
-				if (fixed.ok) {
-					// 改名后本次运行直接接着检查：用改名提交读新文件（GITHUB_TOKEN 推的提交不会触发新工作流）
-					out.fixed = fixed.newPath;
-					out.file = fixed.newPath;
-					f.filename = fixed.newPath;
-					if (fixed.newSha) headSha = fixed.newSha;
-				} else {
-					out.errors = [nameIssue, fixed.reason].filter(Boolean);
-					results.push(out);
-					continue;
-				}
-				out.errors = [nameIssue, fixed.reason].filter(Boolean);
+				out.errors = [nameIssue];
 				results.push(out);
 				continue;
 			}
