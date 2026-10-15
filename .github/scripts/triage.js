@@ -133,7 +133,14 @@ async function tryFixFilename(f, pull) {
 	}),
 	});
 	if (!removed.ok) return { ok: false, reason: "已建好 " + newPath + "，但旧文件删除失败：" + (await removed.text()).slice(0, 200) };
-	return { ok: true, newPath: newPath };
+	let newSha = head.sha;
+	try {
+	const removedJson = await removed.json();
+	if (removedJson && removedJson.commit && removedJson.commit.sha) newSha = removedJson.commit.sha;
+	} catch (e) {
+	// 拿不到就用原 sha，下面读文件会失败并被 catch 记录
+	}
+	return { ok: true, newPath: newPath, newSha: newSha };
 }
 
 async function readFileAt(ref, path) {
@@ -194,7 +201,7 @@ async function main() {
 	}
 
 	const pull = await (await api("/repos/" + REPO + "/pulls/" + PR)).json();
-	const headSha = pull.head.sha;
+	let headSha = pull.head.sha;
 	const defaultBranch = pull.base.ref;
 
 	let siteCfg;
@@ -216,9 +223,15 @@ async function main() {
 			if (nameIssue) {
 				const fixed = await tryFixFilename(f, pull);
 				if (fixed.ok) {
+					// 改名后本次运行直接接着检查：用改名提交读新文件（GITHUB_TOKEN 推的提交不会触发新工作流）
 					out.fixed = fixed.newPath;
+					out.file = fixed.newPath;
+					f.filename = fixed.newPath;
+					if (fixed.newSha) headSha = fixed.newSha;
+				} else {
+					out.errors = [nameIssue, fixed.reason].filter(Boolean);
 					results.push(out);
-					continue; // 改名触发 synchronize，下一次运行再正式检查
+					continue;
 				}
 				out.errors = [nameIssue, fixed.reason].filter(Boolean);
 				results.push(out);
@@ -308,6 +321,19 @@ async function main() {
 		} catch (e) { /* 已存在则忽略 */ }
 	}
 	try {
+	// 托管标签先清掉本次不需要的（POST 是追加语义，不清理会攒出一堆过期标签）
+	const MANAGED_LABELS = [
+		"友链", "网站可达", "网站不可达", "头像可达", "头像不可达",
+		"双向链接验证", "未找到回链", "回链检查受限", "URL 全部可达", "URL 有不可达", "条目无效",
+	].concat(Object.keys(LABEL_BY_KIND).map(function (k) { return LABEL_BY_KIND[k]; }));
+	for (const name of MANAGED_LABELS) {
+	if (want.has(name)) continue;
+	try {
+	await api("/repos/" + REPO + "/issues/" + PR + "/labels/" + encodeURIComponent(name), { method: "DELETE" });
+	} catch (e) {
+	// 没有这个标签就忽略
+	}
+	}
 		await api("/repos/" + REPO + "/issues/" + PR + "/labels", {
 			method: "POST",
 			body: JSON.stringify({ labels: Array.from(want) }),
