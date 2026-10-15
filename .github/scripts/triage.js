@@ -6,8 +6,19 @@
  *  - PR 里的文件内容全部通过 GitHub API 读取，只当数据解析
  *  - 抓取前做协议与内网地址拦截（见 backlink.js 的 isSafeHttpUrl）
  *  - 结果只提示，不自动合并、不自动关闭
+ *
+ * 结论分档（见 backlink.js 的 classifyCheck）：
+ *  passed / notFound / degraded / fetchFailed / unsafe / invalid
+ *  其中 degraded 明确表示「真浏览器失败、降级抓取，结论不可信」，
+ *  绝不与 notFound（抓到了真实页面、确实没有链接）混为一谈。
  */
-const { validateEntry, verifyBacklink, formatDebug, isSafeHttpUrl } = require("./backlink.js");
+const {
+	validateEntry,
+	verifyBacklink,
+	formatDebug,
+	classifyCheck,
+	isSafeHttpUrl,
+} = require("./backlink.js");
 const { fetchHtml } = require("./fetch-page.js");
 
 const TOKEN = process.env.GITHUB_TOKEN || "";
@@ -15,11 +26,12 @@ const REPO = process.env.GITHUB_REPOSITORY || "";
 const PR = process.env.PR_NUMBER || "";
 const API = "https://api.github.com";
 
-const LABELS = {
+const LABEL_BY_KIND = {
 	invalid: "link-check: 条目无效",
 	unsafe: "link-check: 地址不安全",
 	passed: "link-check: 已确认回链",
 	notFound: "link-check: 未找到回链",
+	degraded: "link-check: 抓取受限",
 	fetchFailed: "link-check: 抓取失败",
 };
 
@@ -63,6 +75,44 @@ async function readFileAt(ref, path) {
 	return res.text();
 }
 
+function renderResult(r, defaultBranch) {
+	const out = [];
+	const kind = classifyCheck(r);
+	out.push("### `" + r.file + "`" + (r.status === "added" ? "（新增）" : ""));
+	out.push("");
+
+	if (kind === "invalid") {
+		out.push("❌ **条目校验未通过**：");
+		for (const e of r.errors) out.push("- " + e);
+		out.push("");
+		out.push("请参考 [README](../blob/" + defaultBranch + "/README.md) 里的字段说明修改。");
+	} else if (kind === "unsafe") {
+		out.push("⚠️ **地址不安全**：`" + r.target + "` 不是 http(s) 公网地址，已跳过抓取。");
+	} else if (kind === "passed") {
+		out.push("✅ **已确认回链**：在 `" + r.target + "` 找到了指向本站的链接。");
+		out.push("> 抓取方式：" + (r.check.via || "?") + (r.check.status ? "，HTTP " + r.check.status : ""));
+	} else if (kind === "degraded") {
+		out.push("⚠️ **无法确认回链**（既不算通过，也不算没加）：");
+		out.push("- 真浏览器没能打开该页面，已降级为普通抓取，拿到的很可能不是真实页面。");
+		out.push("- 常见原因：站点有人机验证（如 Anubis/Cloudflare 盾）、阻止无头浏览器、或加载超时。");
+		out.push("- 降级原因：" + (r.check.playwrightError || "未知"));
+		out.push(formatDebug(r.check));
+		out.push("");
+		out.push("> 这类情况**需要维护者人工确认**，请勿据此认定对方没有添加友链。");
+	} else if (kind === "fetchFailed") {
+		out.push("❌ **抓取失败**：" + ((r.check && r.check.error) || "未知错误"));
+		out.push("");
+		out.push("> 目标站可能临时不可达、拒绝外部访问或域名解析失败，可稍后重试或人工确认。");
+	} else {
+		out.push("⚠️ **未检测到回链**：" );
+		out.push(formatDebug(r.check || { found: false }));
+		out.push("");
+		out.push("> 抓取目标：`" + r.target + "`，方式：" + ((r.check && r.check.via) || "-") + "（已抓到真实页面内容）");
+	}
+	out.push("");
+	return out;
+}
+
 async function main() {
 	if (!TOKEN || !REPO || !PR) {
 		console.error("缺少 GITHUB_TOKEN / GITHUB_REPOSITORY / PR_NUMBER");
@@ -76,7 +126,7 @@ async function main() {
 	let siteCfg;
 	try { siteCfg = JSON.parse(await readFileAt(defaultBranch, "config/site.json")); }
 	catch (e) { console.error("读取 config/site.json 失败：" + e.message); process.exit(1); }
-	const aliases = [siteCfg.url].concat(siteCfg.aliases || [], [siteCfg.friends_page]).filter(Boolean);
+	const aliases = [siteCfg.url, siteCfg.friends_page].concat(siteCfg.aliases || []).filter(Boolean);
 
 	const files = await getChangedFriendFiles();
 	if (files.length === 0) {
@@ -103,60 +153,43 @@ async function main() {
 			} else {
 				const page = await fetchHtml(target);
 				if (!page.ok) out.check = { found: false, error: page.error };
-				else Object.assign((out.check = verifyBacklink(page.html, aliases)), { via: page.via, status: page.status });
+				else {
+					Object.assign(
+						(out.check = verifyBacklink(page.html, aliases)),
+						{ via: page.via, status: page.status, degraded: page.degraded === true, playwrightError: page.playwrightError },
+					);
+				}
 			}
 		}
 		results.push(out);
 	}
 
-	// ── 组装评论 ──
 	const lines = [];
 	lines.push("## 友链提交检查结果");
 	lines.push("");
 	lines.push("> 仅供你自查参考；**不会自动拒绝或自动合并**，最终由维护者判断。");
 	lines.push("");
-	for (const r of results) {
-		lines.push("### `" + r.file + "`" + (r.status === "added" ? "（新增）" : ""));
-		if (r.errors && r.errors.length) {
-			lines.push("");
-			lines.push("❌ **条目校验未通过**：");
-			for (const e of r.errors) lines.push("- " + e);
-			lines.push("");
-			lines.push("请参考 [README](../blob/" + defaultBranch + "/README.md) 里的字段说明修改。");
-		} else if (r.unsafe) {
-			lines.push("");
-			lines.push("⚠️ **地址不安全**：`" + r.target + "` 不是 http(s) 公网地址，已跳过抓取。");
-		} else if (r.check && r.check.found) {
-			lines.push("");
-			lines.push("✅ **已确认回链**：在 `" + r.target + "` 找到了指向本站的链接。");
-			lines.push("> 抓取方式：" + (r.check.via || "?") + (r.check.status ? "，HTTP " + r.check.status : ""));
-		} else {
-			lines.push("");
-			lines.push("⚠️ **未检测到回链**（这不代表一定没加）：");
-			lines.push(formatDebug(r.check || { found: false }));
-			lines.push("");
-			lines.push("> 抓取目标：`" + r.target + "`，方式：" + ((r.check && r.check.via) || "-"));
-			lines.push("> 如果你的站点有人机验证或纯前端渲染，抓取可能拿不到内容，属正常情况。");
-		}
-		lines.push("");
-	}
+	for (const r of results) lines.push.apply(lines, renderResult(r, defaultBranch));
 	lines.push("---");
-	lines.push("由 `pr-check` workflow 自动生成 · [" + (process.env.GITHUB_RUN_ID || "") + "](" + (process.env.GITHUB_SERVER_URL || "https://github.com") + "/" + REPO + "/actions/runs/" + (process.env.GITHUB_RUN_ID || "") + ")");
+	lines.push(
+		"由 `pr-check` workflow 自动生成 · [" +
+			(process.env.GITHUB_RUN_ID || "") +
+			"](" +
+			(process.env.GITHUB_SERVER_URL || "https://github.com") +
+			"/" +
+			REPO +
+			"/actions/runs/" +
+			(process.env.GITHUB_RUN_ID || "") +
+			")",
+	);
 
 	await api("/repos/" + REPO + "/issues/" + PR + "/comments", {
 		method: "POST",
 		body: JSON.stringify({ body: lines.join("\n") }),
 	});
 
-	// ── 打标签（先确保标签存在；失败不影响结论） ──
 	const want = new Set();
-	for (const r of results) {
-		if (r.errors && r.errors.length) want.add(LABELS.invalid);
-		else if (r.unsafe) want.add(LABELS.unsafe);
-		else if (r.check && r.check.found) want.add(LABELS.passed);
-		else if (r.check && r.check.error) want.add(LABELS.fetchFailed);
-		else want.add(LABELS.notFound);
-	}
+	for (const r of results) want.add(LABEL_BY_KIND[classifyCheck(r)]);
 	for (const name of want) {
 		try {
 			await api("/repos/" + REPO + "/labels", {

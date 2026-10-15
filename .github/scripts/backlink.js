@@ -84,4 +84,26 @@ function formatDebug(result) {
   return lines.join("\n");
 }
 
-module.exports = { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, formatDebug, validateEntry: build.validateEntry };
+/**
+ * 把一个条目的检查结果归类。抽成纯函数是为了可单测，也保证评论措辞与标签一致。
+ *
+ * 分类：
+ *   invalid      条目字段不合法
+ *   unsafe       填的地址不是公网 http(s)
+ *   fetchFailed  页面完全抓不到
+ *   degraded     真浏览器失败、降级为普通抓取 —— 结论不可信，不能算「确认没有」
+ *   passed       确认已放回链
+ *   notFound     抓到了真实页面，但里面确实没有本站链接
+ */
+function classifyCheck(r) {
+	if (!r) return "fetchFailed";
+	if (r.errors && r.errors.length) return "invalid";
+	if (r.unsafe) return "unsafe";
+	if (!r.check) return "fetchFailed";
+	if (r.check.degraded) return "degraded";
+	if (r.check.found) return "passed";
+	if (r.check.error) return "fetchFailed";
+	return "notFound";
+}
+
+module.exports = { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, formatDebug, classifyCheck, validateEntry: build.validateEntry };

@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, validateEntry } = require("./backlink.js");
+const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, classifyCheck, validateEntry } = require("./backlink.js");
 
 const ALIASES = ["https://blog.legspcpd.top/", "https://www.legspcpd.top/", "https://legspcpd.top/"];
 let pass = 0;
@@ -50,6 +50,26 @@ ok("validateEntry 与构建脚本同源（avatar 为必填，可为 null）", fu
   assert.ok(validateEntry({ name: "A", url: "https://a.com/" }).length > 0, "缺 avatar 应被拒");
   assert.deepStrictEqual(validateEntry({ name: "A", avatar: null, url: "https://a.com/" }), []);
   assert.ok(validateEntry({ name: "A", avatar: null, url: "javascript:alert(1)" }).length > 0);
+});
+
+ok("classifyCheck：字段不合法 -> invalid", function () {
+  assert.strictEqual(classifyCheck({ errors: ["x"] }), "invalid");
+});
+ok("classifyCheck：降级抓取 -> degraded（不算确认没有）", function () {
+  assert.strictEqual(classifyCheck({ check: { found: false, degraded: true } }), "degraded");
+});
+ok("classifyCheck：确认找到 -> passed", function () {
+  assert.strictEqual(classifyCheck({ check: { found: true } }), "passed");
+});
+ok("classifyCheck：真实页面确实没有 -> notFound", function () {
+  assert.strictEqual(classifyCheck({ check: { found: false } }), "notFound");
+});
+ok("classifyCheck：完全抓不到 -> fetchFailed", function () {
+  assert.strictEqual(classifyCheck({ check: { found: false, error: "boom" } }), "fetchFailed");
+  assert.strictEqual(classifyCheck({}), "fetchFailed");
+});
+ok("classifyCheck：地址不安全 -> unsafe", function () {
+  assert.strictEqual(classifyCheck({ unsafe: true }), "unsafe");
 });
 
 console.log("\n✅ 全部通过：" + pass + " 项\n");

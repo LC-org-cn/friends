@@ -45,7 +45,13 @@ async function fetchHtml(url, options) {
 	}
 
 	try {
-		return await withFetch(url, timeoutMs);
+		const result = await withFetch(url, timeoutMs);
+		// 降级标记：真浏览器没打开成功，退回了普通抓取。
+		// 此时拿到的很可能不是真实页面（人机验证挑战页、被拦页面等），
+		// 因此结论只能算「无法确认」，不能算「确认没有」。
+		result.degraded = true;
+		result.playwrightError = playwrightError;
+		return result;
 	} catch (e) {
 		return { ok: false, error: "浏览器抓取失败：" + playwrightError + "；普通抓取也失败：" + (e && e.message ? e.message : String(e)) };
 	}
