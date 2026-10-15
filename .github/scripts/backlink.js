@@ -161,6 +161,20 @@ async function checkReachable(url, opts) {
  * 由各条检查结果汇总 PR 标签：一项检查一个标签，成对出现（通过 / 不通过）。
  * 纯函数，便于测试。
  */
+const FRIEND_DIR = "data/friends/";
+
+/** data/friends/ 下的一级文件路径（不要求扩展名） */
+function isFriendDataPath(p) {
+	return typeof p === "string" && p.indexOf(FRIEND_DIR) === 0 && p.indexOf("/", FRIEND_DIR.length) < 0;
+}
+
+/** 文件名问题；没问题时返回 null */
+function filenameIssue(p) {
+	if (!isFriendDataPath(p)) return "不在 data/friends/ 目录下";
+	if (p.slice(-5) !== ".json") return "文件名必须以 .json 结尾（例如 " + p.slice(FRIEND_DIR.length) + ".json）";
+	return null;
+}
+
 function computeLabels(results) {
 	const want = new Set(["友链"]);
 	let siteAll = true;
@@ -168,6 +182,7 @@ function computeLabels(results) {
 	let hasAvatar = false;
 	let backlinkOk = true;
 	let backlinkUnknown = false;
+	let anyInvalid = false;
 	for (const r of results) {
 		if (!(r.siteOk && r.siteOk.ok)) siteAll = false;
 		if (r.data && r.data.avatar) {
@@ -175,6 +190,7 @@ function computeLabels(results) {
 			if (!(r.avatarOk && r.avatarOk.ok)) avatarAll = false;
 		}
 		const kind = classifyCheck(r);
+		if (r.errors && r.errors.length) anyInvalid = true;
 		if (kind === "notFound") backlinkOk = false;
 		else if (kind !== "passed") backlinkUnknown = true;
 	}
@@ -183,6 +199,7 @@ function computeLabels(results) {
 	if (backlinkOk && backlinkUnknown) want.add("回链检查受限");
 	else if (backlinkOk) want.add("双向链接验证");
 	else want.add("未找到回链");
+	if (anyInvalid) want.add("条目无效");
 	want.add(siteAll && avatarAll ? "URL 全部可达" : "URL 有不可达");
 	return Array.from(want);
 }
@@ -207,6 +224,9 @@ module.exports = {
 	detectChallenge,
 	classifyCheck,
 	computeLabels,
+	isFriendDataPath,
+	filenameIssue,
+	FRIEND_DIR,
 	checkReachable,
 	validateEntry: build.validateEntry,
 };

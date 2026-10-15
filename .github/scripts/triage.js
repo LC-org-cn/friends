@@ -21,6 +21,8 @@ const {
 	detectChallenge,
 	isSafeHttpUrl,
 	computeLabels,
+	isFriendDataPath,
+	filenameIssue,
 	checkReachable,
 } = require("./backlink.js");
 const { fetchHtml } = require("./fetch-page.js");
@@ -78,7 +80,7 @@ async function getChangedFriendFiles() {
 	const files = await res.json();
 	return files.filter(function (f) {
 		return (
-			/^data\/friends\/.+\.json$/.test(f.filename) &&
+			isFriendDataPath(f.filename) &&
 			["added", "modified", "renamed"].indexOf(f.status) !== -1
 		);
 	});
@@ -160,6 +162,12 @@ async function main() {
 	for (const f of files) {
 		const out = { file: f.filename, status: f.status };
 		try {
+			const nameIssue = filenameIssue(f.filename);
+			if (nameIssue) {
+				out.errors = [nameIssue];
+				results.push(out);
+				continue;
+			}
 			const text = await readFileAt(headSha, f.filename);
 			out.data = JSON.parse(text);
 			out.errors = validateEntry(out.data);

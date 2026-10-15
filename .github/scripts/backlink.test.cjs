@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, detectChallenge, classifyCheck, validateEntry, computeLabels } = require("./backlink.js");
+const { isSafeHttpUrl, normalizeUrl, extractHrefs, verifyBacklink, detectChallenge, classifyCheck, validateEntry, computeLabels, isFriendDataPath, filenameIssue } = require("./backlink.js");
 
 const ALIASES = ["https://blog.legspcpd.top/", "https://www.legspcpd.top/", "https://legspcpd.top/"];
 let pass = 0;
@@ -93,6 +93,19 @@ ok("classifyCheck：抓到的其实是挑战页 -> degraded", function () {
 });
 
 
+
+ok("isFriendDataPath / filenameIssue：只看目录，且能指出缺 .json", function () {
+	assert.strictEqual(isFriendDataPath("data/friends/abc"), true);
+	assert.strictEqual(isFriendDataPath("data/friends/abc.json"), true);
+	assert.strictEqual(isFriendDataPath("data/friends/sub/abc.json"), false);
+	assert.strictEqual(isFriendDataPath("data/other/abc.json"), false);
+	assert.strictEqual(filenameIssue("data/friends/abc.json"), null);
+	assert.ok(filenameIssue("data/friends/abc").indexOf(".json") >= 0, "应提示补 .json");
+});
+ok("computeLabels：条目无效的提交带上「条目无效」标签", function () {
+	const labels = computeLabels([{ data: { url: "https://a.example/" }, errors: ["name 过长"], siteOk: { ok: true, status: 200 }, check: { found: true } }]);
+	assert.ok(labels.indexOf("条目无效") >= 0);
+});
 ok("computeLabels：全部通过时给出正向标签", function () {
 	const labels = computeLabels([{ data: { url: "https://a.example/", avatar: "https://a.example/avatar.png" }, siteOk: { ok: true, status: 200 }, avatarOk: { ok: true, status: 200 }, check: { found: true } }]);
 	["友链", "网站可达", "头像可达", "双向链接验证", "URL 全部可达"].forEach(function (n) { assert.ok(labels.indexOf(n) >= 0, "缺少 " + n); });
