@@ -6,11 +6,24 @@
 - 合并后由 Action 自动聚合为仓库根目录的 `friends.json`，站点构建时读取它
 - 提交 PR 后，Action 会校验格式并**尝试检测你站点上是否已添加本站链接**，把结果贴在评论里
 
+> 从本站**友链页**点「打开友链仓库，添加友链」按钮也能直接到这里：<https://blog.legspcpd.top/friends/>
+
 ## 怎么提交友链
 
 1. Fork 本仓库
-2. 在 `data/friends/` 下新建一个文件，文件名用你站点的短名，例如 `your-blog.json`
-3. 内容按下面的格式填，然后提 PR
+2. 在 `data/friends/` 下新建一个文件，内容按下面的格式填，然后提 PR
+3. Action 会自动校验并在 PR 里留言；维护者合并后，你的友链就会出现在本站友链页
+
+**文件名规则**：用你站点的短名，只含字母、数字、`-`、`_`、`.`，例如 `your-blog.json`、`2x-nz.json`。
+文件名只用于区分条目，展示的是文件里的 `name` 字段。
+
+**想少点几下？** 可以直接用这个链接打开 GitHub 的新建文件页面（路径已填好），粘贴模板后提交即可：
+
+```
+https://github.com/LegspCpd/friends/new/main?filename=data/friends/your-blog.json
+```
+
+下面是一个完整示例；其中 `description` / `vip` / `backlink` / `tags` 都可以省略，只保留 `name` / `avatar` / `url` 也能提交：
 
 ```json
 {
