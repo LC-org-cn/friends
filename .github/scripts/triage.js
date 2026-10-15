@@ -224,16 +224,23 @@ async function main() {
 	if (!filenameIssue(f.filename)) continue;
 	const fixed = await tryFixFilename(f, pull);
 	if (fixed.ok) {
-	fixedNames[fixed.newPath] = true;
+		fixedNames[fixed.newPath] = fixed.newSha || true;
 	console.log("已自动改名：" + f.filename + " -> " + fixed.newPath);
 	} else if (fixed.reason) {
 	console.log("自动改名未完成：" + fixed.reason);
 	}
 	}
-	if (Object.keys(fixedNames).length > 0) {
-	const freshPull = await (await api("/repos/" + REPO + "/pulls/" + PR)).json();
-	headSha = freshPull.head.sha;
-	filesToCheck = await getChangedFriendFiles();
+	const renamedPaths = Object.keys(fixedNames);
+	if (renamedPaths.length > 0) {
+		// 直接用改名提交的 sha：紧跟改名查 PR 的 head 会有延迟，拿到的还是旧提交
+		const lastSha = fixedNames[renamedPaths[renamedPaths.length - 1]];
+		if (lastSha && lastSha !== true) headSha = lastSha;
+		// 文件列表也在本地换名，不依赖 /pulls/{n}/files 的更新时机
+		filesToCheck = files.map(function (f) {
+			return fixedNames[f.filename]
+				? Object.assign({}, f, { filename: f.filename + ".json" })
+				: f;
+		});
 	}
 
 	const results = [];
