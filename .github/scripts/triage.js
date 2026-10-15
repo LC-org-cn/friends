@@ -224,29 +224,30 @@ async function main() {
 	if (!filenameIssue(f.filename)) continue;
 	const fixed = await tryFixFilename(f, pull);
 	if (fixed.ok) {
-		fixedNames[fixed.newPath] = fixed.newSha || true;
+		fixedNames[f.filename] = { newPath: fixed.newPath, sha: fixed.newSha || "" };
 	console.log("已自动改名：" + f.filename + " -> " + fixed.newPath);
 	} else if (fixed.reason) {
 	console.log("自动改名未完成：" + fixed.reason);
 	}
 	}
-	const renamedPaths = Object.keys(fixedNames);
-	if (renamedPaths.length > 0) {
+	const renamedOldPaths = Object.keys(fixedNames);
+	let renamedNewPaths = {};
+	if (renamedOldPaths.length > 0) {
 		// 直接用改名提交的 sha：紧跟改名查 PR 的 head 会有延迟，拿到的还是旧提交
-		const lastSha = fixedNames[renamedPaths[renamedPaths.length - 1]];
-		if (lastSha && lastSha !== true) headSha = lastSha;
-		// 文件列表也在本地换名，不依赖 /pulls/{n}/files 的更新时机
+		const lastOld = renamedOldPaths[renamedOldPaths.length - 1];
+		if (fixedNames[lastOld].sha) headSha = fixedNames[lastOld].sha;
+		// 文件列表在本地换名，不依赖 /pulls/{n}/files 的更新时机
 		filesToCheck = files.map(function (f) {
-			return fixedNames[f.filename]
-				? Object.assign({}, f, { filename: f.filename + ".json" })
-				: f;
+			if (!fixedNames[f.filename]) return f;
+			renamedNewPaths[fixedNames[f.filename].newPath] = true;
+			return Object.assign({}, f, { filename: fixedNames[f.filename].newPath });
 		});
 	}
 
 	const results = [];
 	for (const f of filesToCheck) {
 		const out = { file: f.filename, status: f.status };
-			if (fixedNames[f.filename]) out.fixed = f.filename;
+			if (renamedNewPaths[f.filename]) out.fixed = f.filename;
 		try {
 			// 文件名的自动补缀已在前置预检里处理；走到这里说明无法自动修（如 fork 的 PR）
 			const nameIssue = filenameIssue(f.filename);
